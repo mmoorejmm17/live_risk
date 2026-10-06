@@ -1,0 +1,39 @@
+[project]
+name = "quantifi-live-risk"
+version = "0.1.0"
+description = "Quantifi DSP / live risk analytics"
+authors = [
+    {name = "Matt Moore",email = "mmoore@hudsonbaycapital.com"}
+]
+requires-python = ">=3.12,<3.15"
+dependencies = [
+    "pandas>=3.0.3,<4.0.0",
+    "numpy>=2.4.6,<3.0.0",
+    "matplotlib>=3.9.1,<4.0.0",
+    "ipykernel>=6.29.0,<7.0.0",
+    "jupyterlab>=4.3.5,<5.0.0",
+    "databricks-sql-connector (>=4.2.6,<5.0.0)",
+    "databricks-utils",
+    "qncore",
+    "bbg-utils",
+    # qservices (DSP client) dependencies
+    "requests",
+    "msal",
+    "msal-extensions",
+    "requests-negotiate-sspi",
+    "pywin32",
+    "ipywidgets (>=8.1.9,<9.0.0)",
+]
+
+[tool.poetry]
+package-mode = false
+
+[tool.poetry.dependencies]
+databricks-utils = {path = "S:/Structured Credit/Matt Stuff/claude_repos/databricks_utils"}
+# DSP build of qncore: Quantifi.*, clr, qn and qservices (DSP client). Not on PyPI.
+qncore = {path = "vendor/qncore-windows-x64_DSP_22.1.4.zip"}
+bbg-utils = {path = "S:/Structured Credit/Matt Stuff/claude_repos/bbg_utils"}
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
