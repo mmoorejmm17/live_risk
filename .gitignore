@@ -6,3 +6,5 @@ inflight_chunk.txt
 
 vendor/
 .claude/settings.local.json
+pricer_cache/
+*.parquet

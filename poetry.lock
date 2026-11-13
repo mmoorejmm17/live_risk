@@ -3048,18 +3048,18 @@ cffi = {version = "*", markers = "implementation_name == \"pypy\""}
 
 [[package]]
 name = "qncore"
-version = "22.1.4"
-description = "Clr package for quantifi"
+version = "24.0.1"
+description = "CLR package for quantifi"
 optional = false
-python-versions = ">=2.7"
+python-versions = ">=3.6"
 groups = ["main"]
 files = [
-    {file = "qncore-windows-x64_DSP_22.1.4.zip", hash = "sha256:f0c8395b13f7a100458dd7d0ab040462dec5aeed7bac4ef9820bcbca3c8a73f0"},
+    {file = "qncore-windows-x64_DSP_24.0.1.zip", hash = "sha256:b10aa77fc9e29b25d57022a70ebddfcef665809c9f326c60ce32f9a7698d25c3"},
 ]
 
 [package.source]
 type = "file"
-url = "vendor/qncore-windows-x64_DSP_22.1.4.zip"
+url = "vendor/qncore-windows-x64_DSP_24.0.1.zip"
 
 [[package]]
 name = "referencing"
@@ -3661,4 +3661,4 @@ test = ["duckdb (>=1.5.0)", "pandas (>=2.2.2,<4)", "polars[timezone] (>=0.20.4)"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<3.15"
-content-hash = "65afea428c568dc92f18824fa86f63541e375784a5a098d0b064ba450bf8d06e"
+content-hash = "6244eaf6e10ac19fb37710dec99309e601c7200e6b008cb4bfea220dfcbf5aa0"

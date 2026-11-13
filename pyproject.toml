@@ -30,8 +30,8 @@ package-mode = false
 
 [tool.poetry.dependencies]
 databricks-utils = {path = "S:/Structured Credit/Matt Stuff/claude_repos/databricks_utils"}
-# DSP build of qncore: Quantifi.*, clr, qn and qservices (DSP client). Not on PyPI.
-qncore = {path = "vendor/qncore-windows-x64_DSP_22.1.4.zip"}
+# DSP build of qncore 24.0.1 (inner zip of qncoreDSPClient-24.0.1.zip): Quantifi.*, clr, qn and qservices (DSP client). Not on PyPI.
+qncore = {path = "vendor/qncore-windows-x64_DSP_24.0.1.zip"}
 bbg-utils = {path = "S:/Structured Credit/Matt Stuff/claude_repos/bbg_utils"}
 
 [build-system]
