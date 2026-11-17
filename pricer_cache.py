@@ -133,7 +133,47 @@ def _fmt(v):
     return '; '.join(map(str, v)) if isinstance(v, (list, tuple)) else str(v)
 
 
-def select_trade_ids(Connect, hql=None, ids_csv=None, max_trades=100_000):
+def _d(v):
+    """Date from a DSP record field (ISO string / datetime / None) -> naive date, or None."""
+    import pandas as pd
+    t = pd.to_datetime(v, errors='coerce', utc=True)
+    return None if pd.isna(t) else t.tz_localize(None).normalize()
+
+
+def is_live(trade, as_of):
+    """Live = Done, traded on/before as_of, not terminated on/before as_of, product not matured/expired before as_of."""
+    import pandas as pd
+    a = pd.Timestamp(str(as_of)).normalize()
+    if trade.get('TradeStatus') != 'Done':
+        return False
+    traded = _d(trade.get('Traded'))
+    if traded is not None and traded > a:          # booked after the as-of date: not in the book yet
+        return False
+    prod = trade.get('Product') or {}
+    term = _d(trade.get('Termination'))
+    if term is not None and term <= a:
+        return False
+    for f in ('Maturity', 'Expiration'):
+        d = _d(prod.get(f))
+        if d is not None and d < a:
+            return False
+    return True
+
+
+def live_trade_ids(trades, as_of, include_strategies=None, exclude_strategies=()):
+    """Trade ids of the live trades in a data_query result (see is_live).
+    include_strategies: if given, ONLY these strategy names; exclude_strategies: dropped."""
+    inc = None if include_strategies is None else set(include_strategies)
+    ex = set(exclude_strategies)
+    out = []
+    for t in trades:
+        name = (t.get('Strategy') or {}).get('Name')
+        if is_live(t, as_of) and (inc is None or name in inc) and name not in ex:
+            out.append(t['TradeId'])
+    return out
+
+
+def select_trade_ids(Connect, hql=None, ids_csv=None, max_trades=100_000, live_as_of=None, strategies=None):
     if ids_csv:
         import pandas as pd
         df = pd.read_csv(ids_csv)
@@ -148,11 +188,15 @@ def select_trade_ids(Connect, hql=None, ids_csv=None, max_trades=100_000):
     trades = Connect.data_query(hql, max_results=max_trades, verify_https_cert=False)
     if len(trades) >= max_trades:
         print(f'WARNING: hit max_trades={max_trades}; results probably truncated')
+    if live_as_of:
+        ids = live_trade_ids(trades, live_as_of, include_strategies=strategies)
+        print(f'live filter (Done, traded <= as-of, not terminated/matured/expired at {live_as_of}; strategies={strategies or "all"}): {len(ids)} of {len(trades)} trades')
+        return ids
     return [t['TradeId'] for t in trades]
 
 
 def build_cache(as_of, calc_env='Official', env='Prod', trade_ids=None, hql=None, ids_csv=None,
-                chunk=10, limit=None, refresh=False, retry_errors=False, root=CACHE_ROOT):
+                chunk=10, limit=None, refresh=False, retry_errors=False, live_only=False, strategies=None, root=CACHE_ROOT):
     """Load pricers from DSP, keep those that price, write them to the Parquet cache.
 
     Incremental by default: trade ids already in this (calc_env, as_of) cache are NOT re-requested, and
@@ -163,7 +207,7 @@ def build_cache(as_of, calc_env='Official', env='Prod', trade_ids=None, hql=None
     Existing rows are kept even if the trade has since left the id list.
     """
     Connect = _connect(env)
-    ids = list(trade_ids) if trade_ids is not None else select_trade_ids(Connect, hql, ids_csv)
+    ids = list(trade_ids) if trade_ids is not None else select_trade_ids(Connect, hql, ids_csv, live_as_of=as_of if live_only else None, strategies=strategies)
     ids = list(dict.fromkeys(ids))           # de-dupe, keep order
     if limit:
         ids = ids[:limit]
@@ -269,6 +313,8 @@ def main():
     b.add_argument('--chunk', type=int, default=10)
     b.add_argument('--limit', type=int)
     b.add_argument('--retry-errors', action='store_true', help='re-request trades that failed on an earlier run')
+    b.add_argument('--live-only', action='store_true', help='only Done trades not terminated/matured/expired at as-of')
+    b.add_argument('--strategies', help='comma-separated strategy names to include with --live-only (e.g. Credit,Manual)')
     b.add_argument('--refresh', action='store_true', help='ignore the existing cache and re-pull every trade')
     v = sub.add_parser('verify')
     v.add_argument('--as-of', required=True)
@@ -277,7 +323,8 @@ def main():
     a = ap.parse_args()
     if a.cmd == 'build':
         build_cache(a.as_of, a.calc_env, a.env, hql=a.hql, ids_csv=a.ids_csv, chunk=a.chunk, limit=a.limit,
-                    refresh=a.refresh, retry_errors=a.retry_errors)
+                    refresh=a.refresh, retry_errors=a.retry_errors, live_only=a.live_only,
+                    strategies=a.strategies.split(',') if a.strategies else None)
     else:
         sys.exit(1 if verify_cache(a.as_of, a.calc_env, a.sample) else 0)
 

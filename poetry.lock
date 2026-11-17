@@ -3059,7 +3059,7 @@ files = [
 
 [package.source]
 type = "file"
-url = "vendor/qncore-windows-x64_DSP_24.0.1.zip"
+url = "../quantifi_vendor/qncore-windows-x64_DSP_24.0.1.zip"
 
 [[package]]
 name = "referencing"
@@ -3661,4 +3661,4 @@ test = ["duckdb (>=1.5.0)", "pandas (>=2.2.2,<4)", "polars[timezone] (>=0.20.4)"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<3.15"
-content-hash = "6244eaf6e10ac19fb37710dec99309e601c7200e6b008cb4bfea220dfcbf5aa0"
+content-hash = "83aca280e98cd6f931e548cc0ed387482b57132187c3852a8c7a45b930aca32f"

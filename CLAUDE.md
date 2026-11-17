@@ -45,6 +45,11 @@ change a lot as index spreads move intraday. Correct, fast re-risking of these i
   and verified (CDX/CDS/tranche load, 60/60 cached pricers match). **Cosmetic leftover:** stale metadata dirs
   `site-packages\qncore-22.1.4.dist-info` and `~ncore-22.1.1.dist-info` make `pip list` show 22.1.4 and warn
   about `~ncore`; deleting them is harmless (Matt declined an automated rm, so do it by hand or ask).
+  **Where the zip lives:** `vendor/` is gitignored (licensed Quantifi binary, don't commit). Canonical copies are on
+  the shared drive: `S:\Structured Credit\Matt Stuff\quantifi_vendor\` (24.0.1 and the old 22.1.4); `pyproject.toml`
+  points there via the RELATIVE path `../quantifi_vendor/...zip` (an absolute `S:/...` path made `poetry lock`
+  crash with an AssertionError in Poetry 2.4.1, so keep it relative). Works only if the repo is cloned as a
+  sibling of `quantifi_vendor` (i.e. under `S:\Structured Credit\Matt Stuff\`).
   Remaining TODO: rebuild cache for CDX/CDS/tranche trades; add live-options + `Done` filter.
 - (older) **qncore 26.0 downloaded 2026-11-13, NOT installed.** In
   `C:\Users\mmoore\Downloads`: `qncore-windows-x64-26.0.zip` (the Python/CLR package; the `(1).zip` is a
@@ -207,3 +212,55 @@ into the Risk DB that DSP reads from — don't keep searching the DSP Python cli
 installed client provably has no write surface. The `quantifi-mcp-toolkit` MCP server can't help
 here either — it only grounds the Toolkit *pricing* API (`Quantifi.Toolkit.*`), not the
 `qservices` DSP REST client or the Risk application's trade-booking/import mechanism.
+
+## Live trades & Credit-vs-Manual reconciliation (2026-11-15, as-of 2026-11-13, Official)
+
+- **ROOT CAUSE of the 2026-11-13 notebook failures (5530 `_indexFactor`, 2500 `traded_`): the Jupyter kernel
+  `quantifi-live-risk` runs in the POETRY VENV** (`...\pypoetry\Cacheirtualenvs\quantifi-live-risk-Bi6SF7dF-py3.12`),
+  which still has **qncore 22.1.4**. The 24.0.1 install went into system Python312 only (CLI `python pricer_cache.py` uses
+  that one and works). Fix: `poetry install` in the repo (poetry.lock already says 24.0.1), restart kernel, verify
+  `Quantifi.Toolkit` assembly version 24.0.1.0.
+- `credit_manual_rec.py` + `credit_manual_rec.ipynb`: Credit-vs-Manual rec by risk bucket (net notional, PV, `Sensitivities.Spread01`
+  from `Quantifi.Toolkit.Sensitivity`). First run (379 live Credit/Manual trades, all priced): 71 buckets OK, 8 BREAK,
+  14 ONLY_Credit, 18 ONLY_Manual; all 4 CDX option buckets tie exactly. Run from system Python; notebook needs the venv fixed.
+- `pricer_cache.py` now has `is_live` / `live_trade_ids` and `build --live-only` (Done, no Termination <= as_of,
+  Product Maturity/Expiration >= as_of). The notebook's `trade_ids` cell has NOT been switched to it yet.
+- **Abhishek live trades: 501 of 9,722 -> 482 priced, 19 fail** (BindError: missing survival curve scaling for
+  HY37/39/40/BB37 & iTraxx XO42 on 13-Nov, missing IRiskCorrelation for BNP Fairmont/Ashburn, Nomura Main37 ZR). All 8 live CDX options price.
+- By strategy (live / priced / PV): Manual 220/220/-100.6M; Credit 159/159/-115.9M; CV Draft Trades 73/62; TradeIdeas 29/21; Standard Risk Calc 20/20.
+- **TO DO (Matt's requirement): "Credit" = official booking, flows downstream from official booking systems; "Manual" = trades
+  we book ourselves. The two strategies must tie out in trades AND risk.** Live counts today do NOT tie:
+  CDX 51 vs 109, CDS 43 vs 50, CDXTranche 55 vs 51, CDO 6 vs 6, CDXOption 4 vs 4. PV -115.9M vs -100.6M.
+  Build a Credit-vs-Manual reconciliation (match on product/counterparty/strike/expiry/notional, then compare PV and risk).
+  Draft/TradeIdeas/Standard Risk Calc strategies are not part of that tie-out.
+
+## CDX option risk vs Quantifi official (started 2026-11-16)
+
+- `option_risk.py` computes per live option: PV, CS01 (`Sensitivities.Spread01(p,1.0,0.0,None)`), market delta (`MarketDelta(p,0.0001,False)` x Notional),
+  gamma (`MarketGamma` x Notional), vega, theta. Toolkit delta/gamma are per-unit ratios; **Vega/MarketTheta already include Notional**.
+  Saved `option_risk_2026-11-13.csv` (4 unique Manual options).
+- Quantifi official risk: **RiskRun** HQL entity exists per date (`RiskData` = official, `AB Risk Run (Manual)`, `CV Risk Run (Draft Trades)`, `RiskData-WhatIf`; e.g. AsOf 2026-11-13).
+  **RiskMeasure** entity has `CS01`, `Spread01`, `Delta`, `Gamma`, `Vega`, `Theta`, `Pv`, `CS 1%_Delta`, ... Results are fetched with
+  `Connect.data_query_risk_results(min_date, measures, risk_run_name=, trade_id=, tsds_url=)` (TimeSeriesDataService, env `Q_TIMESERIES_DATA_SERVICE_URL_PREFIX`) --
+  **that service URL is not found yet**: ports 47200/47201/47202 on hb-dc1pd-qfidsp all 404 (47202 = ReportingService).
+  `ReportGenerator.generate_report` on 47202 returns 500 "No IPEndpoints were found for host hbc-dc1-qfiap.nyc.gerbercapital.com" (stale host in server config, same as old demo).
+  HQL `FROM RiskResult/Position/Report` are invalid. Need the TimeSeries service URL (or a working report) from Quantifi/infra.
+
+### Official risk comparison (2026-11-17) -- ReportingService works now
+- `ReportGenerator.generate_report(date, r'Users\abhutra\Structured Credit Risk Guidelines', None, 'https://hb-dc1pd-qfidsp:47202', False)` returns 200 (use a RAW string: `\a` in
+  'Users\abhutra' is a bell char). `run_name=None` = official run, trade-level rows (430 for 2026-11-13, saved `official_risk_report_2026-11-13.csv`).
+  `'AB Risk Run (Manual)'` returns only an aggregate row ('*').  Columns: Option Delta, Delta Equivalent Notional, CS 1%, Credit Spread Delta (1bp), Credit Spread Gamma (1bp), Theta, Vega, Vega 1%, Fair Value, ...
+- Official report is in **USD**: EUR (iTraxx) options are x1.1023 vs our local-ccy numbers (PV, vega, delta all). Compare after FX conversion.
+- Ours matches official EXACTLY (USD options): PV/Fair Value, Option Delta (0.028109), Vega, Theta ~.  Official "Delta Equivalent Notional" sign is opposite to our MarketDelta x Notional.
+- **Official CS delta (1bp) = CENTRAL difference of option PV for index quote +/-1bp** (`p.Update(MarketQuote(s0+-1bp, CreditSpread))` -> `FairPrice x Notional`), within ~0.7% of official.
+  `Sensitivities.Spread01` (all-curve bump) and forward-difference bumps do NOT tie (gamma is large). "CS 1%" = relative 1% bump of index spread (s0 x 1%).
+
+## options_risk.ipynb (2026-11-17)
+- `option_repricer.py` + `options_risk.ipynb`: live CDX/iTraxx options (Credit + Manual strategies, Abhishek traders) -> table of trade, index, strike, delta/gamma/vega as of
+  `REPORT_DATE` (2026-11-16, from the pricer cache), then the same greeks re-computed on LIVE Bloomberg index spreads (vol constant, valuation date fixed, no theta).
+- Bloomberg via the user's `bbg_utils` (`bdp_mm`/`bdh_mm`, xbbg; installed in the poetry venv): tickers `CDX IG CDSI S<n> 5Y Corp`, `ITRX EUR CDSI S<n> 5Y Corp`; PX_LAST is the spread in bp.
+  Index-name map: `CDX-NAIGS47V1-5Y` -> S47, `ITRAXX-EUROPES46V1-5Y` -> S46. HY / Crossover are NOT mapped (raises) -- add patterns in `option_repricer._BBG` when options on them appear.
+- Reprice = `p.Update(MarketQuote(bp*1e-4, CreditSpread))`, then **set `Notional` back** (Update resets to 1.0), then MarketDelta/MarketGamma/Vega. Repricing at the booked spread reproduces the base greeks exactly.
+- Quantifi vs Bloomberg 11-16 close basis is tiny (52.11 vs 52.20, 59.91 vs 59.98, 60.28 vs 60.28 bp). `SPREAD_MODE='change'` uses booked + (live - BBG 11-16 close) to strip it.
+- Local currency (EUR iTraxx NOT converted to USD). Credit and Manual hold the same 4 options twice -- do not sum both.
+- Databricks (`claude_repos/databricks_utils`) is planned for tranche work later; not used yet.
